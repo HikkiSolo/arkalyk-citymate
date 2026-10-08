@@ -90,7 +90,7 @@ export default function CityMap({ visibleIds, activeId, resetToken }: { visibleI
 
   return (
     <MapContainer center={ARKALYK} zoom={14} className="h-full w-full" zoomControl attributionControl>
-      <TileLayer attribution="&copy; OpenStreetMap contributors &copy; CARTO" url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png" />
+      <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://tile.openstreetmap.org/{z}/{x}/{y}.png" />
       <MapController activeId={activeId} resetToken={resetToken} />
       {places.filter((place) => visibleIds.includes(place.id)).map((place) => (
         <Marker
