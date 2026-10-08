@@ -1,18 +1,33 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import { Bus, GraduationCap, Route as RouteIcon, Bot, MapPinned, Phone, Send, Car, TrainFront, Fuel, Ruler, Menu, X } from "lucide-react";
-import { LangProvider, useLang, ui, buses, taxis, intercity, categories, destinations, type Category } from "@/lib/i18n";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import {
+  ArrowLeft, Bot, BusFront, Calculator, CarFront, ChevronRight, Clock3, Fuel,
+  MapPin, Menu, Navigation, Search, Send, TrainFront, X,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import {
+  Conversation, ConversationContent, ConversationScrollButton,
+} from "@/components/ai-elements/conversation";
+import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
+import {
+  PromptInput, PromptInputFooter, PromptInputSubmit, PromptInputTextarea,
+} from "@/components/ai-elements/prompt-input";
+import { Shimmer } from "@/components/ai-elements/shimmer";
+import {
+  LangProvider, buses, categories, destinations, intercity, places, ui, useLang,
+  type Category,
+} from "@/lib/i18n";
 
 const CityMap = lazy(() => import("@/components/CityMap"));
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Арқалық Smart Navigator — қала картасы мен AI көмекші" },
-      { name: "description", content: "Interactive Arkalyk city map: transport, education, route calculator and AI city assistant in Kazakh and Russian." },
+      { title: "Арқалық Smart Navigator — интерактивті қала картасы" },
+      { name: "description", content: "Арқалықтың мекемелері, көлігі, бағыттары және қалалық AI көмекшісі бар қазақша және орысша интерактивті карта." },
       { property: "og:title", content: "Арқалық Smart Navigator" },
-      { property: "og:description", content: "Interactive Arkalyk city portal with map, transport, routes and AI assistant." },
+      { property: "og:description", content: "Арқалық мекемелерінің байланыстары, көлік кестесі, қашықтық есебі және AI көмекші." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
@@ -21,184 +36,278 @@ export const Route = createFileRoute("/")({
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Unbounded:wght@500;700&display=swap" },
     ],
   }),
-  component: () => (<LangProvider><App /></LangProvider>),
+  component: () => <LangProvider><App /></LangProvider>,
 });
 
-type Tab = "transport" | "edu" | "route" | "ai";
-const allCats = categories.map((c) => c.id);
+type Panel = "schedule" | "search" | "distance" | "assistant" | null;
+const allPlaceIds = places.map((place) => place.id);
 
 function App() {
   const { lang, setLang, t } = useLang();
-  const [tab, setTab] = useState<Tab>("transport");
-  const [visible, setVisible] = useState<Category[]>(allCats);
   const [mounted, setMounted] = useState(false);
-  const [open, setOpen] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [panel, setPanel] = useState<Panel>(null);
+  const [visibleIds, setVisibleIds] = useState(allPlaceIds);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [resetToken, setResetToken] = useState(0);
 
-  const tabs: { id: Tab; icon: typeof Bus; label: string }[] = [
-    { id: "transport", icon: Bus, label: t(ui.tabTransport) },
-    { id: "edu", icon: GraduationCap, label: t(ui.tabEdu) },
-    { id: "route", icon: RouteIcon, label: t(ui.tabRoute) },
-    { id: "ai", icon: Bot, label: t(ui.tabAi) },
+  useEffect(() => setMounted(true), []);
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const close = (event: KeyboardEvent) => { if (event.key === "Escape") setDrawerOpen(false); };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [drawerOpen]);
+
+  const resetMap = useCallback(() => {
+    setVisibleIds(allPlaceIds);
+    setActiveId(null);
+    setResetToken((value) => value + 1);
+    setDrawerOpen(false);
+    setPanel(null);
+  }, []);
+
+  const selectPanel = (next: Exclude<Panel, null>) => {
+    setPanel(next);
+    setDrawerOpen(true);
+    if (next !== "search") setVisibleIds(allPlaceIds);
+  };
+
+  const selectPlace = (id: string) => {
+    setVisibleIds((ids) => ids.includes(id) ? ids : [...ids, id]);
+    setActiveId(id);
+    if (window.matchMedia("(max-width: 767px)").matches) setDrawerOpen(false);
+  };
+
+  const navigation = [
+    { id: "schedule" as const, icon: BusFront, label: t(ui.schedule) },
+    { id: "search" as const, icon: Search, label: t(ui.search) },
+    { id: "distance" as const, icon: Navigation, label: t(ui.distance) },
+    { id: "assistant" as const, icon: Bot, label: t(ui.assistant) },
   ];
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
-      <header className="z-[1001] flex items-center justify-between gap-3 border-b border-panel-border bg-panel px-4 py-3 text-panel-foreground">
-        <div className="flex items-center gap-3">
-          <button className="md:hidden" onClick={() => setOpen(!open)} aria-label="menu">{open ? <X /> : <Menu />}</button>
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary text-primary-foreground"><MapPinned className="h-5 w-5" /></div>
-          <div>
-            <h1 className="font-display text-base font-bold leading-tight sm:text-lg">Арқалық <span className="text-steppe">Smart Navigator</span></h1>
-            <p className="text-xs text-panel-muted">{t(ui.subtitle)}</p>
-          </div>
-        </div>
-        <div className="flex rounded-full bg-panel-2 p-1 text-xs font-semibold">
-          {(["kk", "ru"] as const).map((l) => (
-            <button key={l} onClick={() => setLang(l)} className={`rounded-full px-3 py-1.5 transition ${lang === l ? "bg-primary text-primary-foreground" : "text-panel-muted hover:text-panel-foreground"}`}>
-              {l === "kk" ? "Қазақша" : "Русский"}
-            </button>
+    <div className="relative h-[100dvh] overflow-hidden bg-background">
+      <main className="absolute inset-0" aria-label={t(ui.appName)}>
+        {mounted && (
+          <Suspense fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground">{t(ui.appName)}</div>}>
+            <CityMap visibleIds={visibleIds} activeId={activeId} resetToken={resetToken} />
+          </Suspense>
+        )}
+      </main>
+
+      <div className="absolute left-3 top-3 z-[900] flex items-center gap-2 sm:left-5 sm:top-5">
+        <div className="language-switch" aria-label="Language">
+          {(["kk", "ru"] as const).map((item) => (
+            <Button key={item} size="sm" variant={lang === item ? "default" : "ghost"} onClick={() => setLang(item)} className="h-8 px-3">
+              {item === "kk" ? "KAZ" : "RUS"}
+            </Button>
           ))}
         </div>
-      </header>
+        <Button size="icon" variant="secondary" onClick={() => setDrawerOpen(true)} aria-label={t(ui.menu)} className="map-control">
+          <Menu />
+        </Button>
+      </div>
 
-      <div className="relative flex flex-1 overflow-hidden">
-        <aside className={`absolute inset-y-0 left-0 z-[1000] flex w-full max-w-sm flex-col bg-panel text-panel-foreground transition-transform md:static md:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
-          <nav className="grid grid-cols-4 gap-1 border-b border-panel-border p-2">
-            {tabs.map(({ id, icon: Icon, label }) => (
-              <button key={id} onClick={() => setTab(id)} className={`flex flex-col items-center gap-1 rounded-lg py-2 text-[11px] font-semibold transition ${tab === id ? "bg-panel-2 text-primary" : "text-panel-muted hover:bg-panel-2/60"}`}>
-                <Icon className="h-5 w-5" />{label}
-              </button>
-            ))}
-          </nav>
-          <div key={tab} className="fade-in flex-1 overflow-y-auto p-4">
-            {tab === "transport" && <TransportTab />}
-            {tab === "edu" && <EduTab visible={visible} setVisible={setVisible} />}
-            {tab === "route" && <RouteTab />}
-            {tab === "ai" && <AiTab />}
+      {!drawerOpen && (
+        <div className="map-title absolute bottom-7 left-3 z-[800] sm:bottom-8 sm:left-5">
+          <span><MapPin /></span>
+          <div><strong>{t(ui.appName)}</strong><small>50.2486, 66.9114</small></div>
+        </div>
+      )}
+
+      {drawerOpen && <button className="drawer-backdrop" aria-label={t(ui.close)} onClick={() => setDrawerOpen(false)} />}
+      <aside className={`city-drawer ${drawerOpen ? "city-drawer--open" : ""}`} aria-hidden={!drawerOpen}>
+        <div className="city-drawer__header">
+          <div>
+            <p>{t(ui.appName)}</p>
+            <span>АРҚАЛЫҚ · ҚАЗАҚСТАН</span>
           </div>
-        </aside>
-        <main className="flex-1">
-          {mounted && <Suspense fallback={null}><CityMap visible={visible} /></Suspense>}
-        </main>
+          <Button size="icon" variant="ghost" onClick={() => setDrawerOpen(false)} aria-label={t(ui.close)}><X /></Button>
+        </div>
+
+        <nav className="city-drawer__nav">
+          <Button variant="ghost" onClick={resetMap} className="drawer-nav-item">
+            <ArrowLeft /><span>{t(ui.back)}</span>
+          </Button>
+          {navigation.map(({ id, icon: Icon, label }) => (
+            <Button key={id} variant="ghost" onClick={() => selectPanel(id)} className={`drawer-nav-item ${panel === id ? "drawer-nav-item--active" : ""}`}>
+              <Icon /><span>{label}</span><ChevronRight className="ml-auto" />
+            </Button>
+          ))}
+        </nav>
+
+        <div className="city-drawer__content">
+          {!panel && <DrawerHome onSelect={selectPanel} />}
+          {panel === "schedule" && <SchedulePanel />}
+          {panel === "search" && <SearchPanel onResults={setVisibleIds} onSelect={selectPlace} />}
+          {panel === "distance" && <DistancePanel />}
+          {panel === "assistant" && <AssistantPanel />}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function PanelTitle({ icon: Icon, children }: { icon: typeof Search; children: string }) {
+  return <div className="panel-title"><span><Icon /></span><h2>{children}</h2></div>;
+}
+
+function DrawerHome({ onSelect }: { onSelect: (panel: Exclude<Panel, null>) => void }) {
+  const { t } = useLang();
+  return (
+    <div className="space-y-4">
+      <div className="drawer-wordmark"><span>50°14′N</span><h2>АРҚАЛЫҚ</h2><p>SMART NAVIGATOR</p></div>
+      <div className="grid grid-cols-2 gap-2">
+        <Button variant="secondary" className="h-auto flex-col items-start py-4" onClick={() => onSelect("search")}><Search />{t(ui.search)}</Button>
+        <Button variant="secondary" className="h-auto flex-col items-start py-4" onClick={() => onSelect("schedule")}><BusFront />{t(ui.schedule)}</Button>
       </div>
     </div>
   );
 }
 
-const Section = ({ title, children }: { title: string; children: React.ReactNode }) => (
-  <section className="mb-6"><h2 className="mb-3 font-display text-xs font-semibold uppercase tracking-wider text-panel-muted">{title}</h2>{children}</section>
-);
-
-function TransportTab() {
+function SchedulePanel() {
   const { t } = useLang();
-  return (<>
-    <Section title={t(ui.busRoutes)}>
-      <div className="space-y-2">{buses.map((b) => (
-        <div key={b.n} className="flex items-center gap-3 rounded-xl bg-panel-2 p-3">
-          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-steppe font-display font-bold text-steppe-foreground">{b.n}</div>
-          <div className="text-sm"><div className="font-semibold">{t(b.route)}</div>
-            <div className="text-xs text-panel-muted">{b.hours} · {t(ui.interval)} {b.every} {t(ui.min)}</div></div>
-        </div>))}</div>
-    </Section>
-    <Section title={t(ui.intercity)}>
-      <div className="divide-y divide-panel-border rounded-xl bg-panel-2">{intercity.map((i) => (
-        <div key={i.time + i.to.ru} className="flex justify-between p-3 text-sm"><span>{t(i.to)}</span><span className="font-semibold text-primary">{i.time}</span></div>))}</div>
-    </Section>
-    <Section title={t(ui.taxi)}>
-      <div className="space-y-2">{taxis.map((x) => (
-        <a key={x.name} href={x.phone === "app" ? "https://go.yandex" : `tel:${x.phone.replace(/[^+\d]/g, "")}`} className="flex items-center justify-between rounded-xl bg-panel-2 p-3 text-sm hover:ring-1 hover:ring-primary">
-          <span className="font-semibold">🚕 {x.name}</span><span className="flex items-center gap-1 text-primary"><Phone className="h-3.5 w-3.5" />{x.phone}</span></a>))}</div>
-    </Section>
-    <p className="text-xs text-panel-muted">* {t(ui.estimate)}</p>
-  </>);
-}
-
-function EduTab({ visible, setVisible }: { visible: Category[]; setVisible: (c: Category[]) => void }) {
-  const { t } = useLang();
-  const toggle = (c: Category) => setVisible(visible.includes(c) ? visible.filter((v) => v !== c) : [...visible, c]);
+  const [mode, setMode] = useState<"local" | "intercity">("local");
   return (
-    <Section title={t(ui.filters)}>
-      <button onClick={() => setVisible(allCats)} className="mb-3 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground">{t(ui.showAll)}</button>
-      <div className="grid grid-cols-2 gap-2">{categories.map((c) => {
-        const on = visible.includes(c.id);
-        return (<button key={c.id} onClick={() => toggle(c.id)} className={`flex items-center gap-2 rounded-xl p-3 text-left text-sm transition ${on ? "bg-panel-2 ring-1 ring-primary" : "bg-panel-2/40 text-panel-muted"}`}>
-          <span className="text-xl">{c.icon}</span>{t(c.label)}</button>);
-      })}</div>
-    </Section>
+    <section>
+      <PanelTitle icon={BusFront}>{t(ui.schedule)}</PanelTitle>
+      <div className="segmented mb-4">
+        <Button size="sm" variant={mode === "local" ? "default" : "ghost"} onClick={() => setMode("local")}>{t(ui.local)}</Button>
+        <Button size="sm" variant={mode === "intercity" ? "default" : "ghost"} onClick={() => setMode("intercity")}>{t(ui.intercity)}</Button>
+      </div>
+      {mode === "local" ? (
+        <div className="space-y-2">{buses.map((bus) => (
+          <article key={bus.n} className="schedule-row">
+            <strong>{bus.n}</strong><div><h3>{t(bus.route)}</h3><p><Clock3 />{bus.hours} · {t(ui.interval)} {bus.every} {t(ui.min)}</p></div>
+          </article>
+        ))}</div>
+      ) : (
+        <div className="space-y-2">{intercity.map((trip) => (
+          <article key={`${trip.time}-${trip.to.kk}`} className="schedule-row">
+            <span className="schedule-row__icon">{trip.mode.kk === "Пойыз" ? <TrainFront /> : <BusFront />}</span>
+            <div><h3>{t(trip.to)}</h3><p>{t(trip.mode)} · {t(ui.departure)} {trip.time}</p></div>
+          </article>
+        ))}</div>
+      )}
+      <p className="panel-note">{t(ui.estimate)}</p>
+    </section>
   );
 }
 
-function RouteTab() {
-  const { t } = useLang();
-  const [dest, setDest] = useState("astana");
-  const d = destinations.find((x) => x.id === dest)!;
-  const driveH = d.km / 80;
-  const fuel = Math.round((d.km * 8) / 100 * 255);
-  const stats = [
-    { icon: Ruler, label: t(ui.distance), value: `${d.km} ${t(ui.km)}` },
-    { icon: Car, label: t(ui.drive), value: `${Math.floor(driveH)} ${t(ui.h)} ${Math.round((driveH % 1) * 60)} ${t(ui.min)}` },
-    { icon: TrainFront, label: t(ui.train), value: d.train ? `≈${d.train} ${t(ui.h)}` : t(ui.noTrain) },
-    { icon: Fuel, label: t(ui.fuel), value: `${fuel.toLocaleString("ru-RU")} ₸` },
-  ];
-  const sel = "w-full rounded-xl border border-panel-border bg-panel-2 p-3 text-sm text-panel-foreground outline-none focus:ring-1 focus:ring-primary";
-  return (<>
-    <label className="mb-1 block text-xs text-panel-muted">{t(ui.from)}</label>
-    <select className={sel + " mb-3"} disabled><option>Арқалық / Аркалык</option></select>
-    <label className="mb-1 block text-xs text-panel-muted">{t(ui.to)}</label>
-    <select className={sel + " mb-5"} value={dest} onChange={(e) => setDest(e.target.value)}>
-      {destinations.map((x) => <option key={x.id} value={x.id}>{t(x.name)}</option>)}
-    </select>
-    <div className="grid grid-cols-2 gap-2">{stats.map(({ icon: Icon, label, value }) => (
-      <div key={label} className="fade-in rounded-xl bg-panel-2 p-3" key-dest={dest}>
-        <Icon className="mb-2 h-5 w-5 text-steppe" /><div className="text-xs text-panel-muted">{label}</div>
-        <div className="font-display text-base font-semibold">{value}</div></div>))}</div>
-    <p className="mt-4 text-xs text-panel-muted">* {t(ui.fuelNote)}. {t(ui.estimate)}.</p>
-  </>);
+function SearchPanel({ onResults, onSelect }: { onResults: (ids: string[]) => void; onSelect: (id: string) => void }) {
+  const { lang, t } = useLang();
+  const [query, setQuery] = useState("");
+  const results = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase(lang === "kk" ? "kk-KZ" : "ru-RU");
+    if (!normalized) return places;
+    return places.filter((place) => [place.name.kk, place.name.ru, place.address.kk, place.address.ru, categories[place.cat].label.kk, categories[place.cat].label.ru, place.summary.kk, place.summary.ru]
+      .join(" ").toLocaleLowerCase().includes(normalized));
+  }, [lang, query]);
+  useEffect(() => { onResults(results.map((place) => place.id)); }, [onResults, results]);
+  return (
+    <section>
+      <PanelTitle icon={Search}>{t(ui.search)}</PanelTitle>
+      <div className="search-box"><Search /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t(ui.searchPlaceholder)} autoFocus /></div>
+      <p className="panel-note mt-2">{t(ui.searchHint)}</p>
+      <div className="mt-4 flex items-center justify-between text-xs text-panel-muted"><span>{t(ui.results)}</span><strong>{results.length}</strong></div>
+      <div className="mt-2 space-y-1">
+        {results.length === 0 && <p className="empty-state">{t(ui.noResults)}</p>}
+        {results.map((place) => (
+          <Button key={place.id} variant="ghost" className="search-result" onClick={() => onSelect(place.id)}>
+            <span className="search-result__icon">{categories[place.cat].icon}</span>
+            <span><strong>{t(place.name)}</strong><small>{t(place.address)}</small></span><ChevronRight />
+          </Button>
+        ))}
+      </div>
+    </section>
+  );
 }
 
-type Msg = { role: "user" | "assistant"; content: string };
-function AiTab() {
-  const { t, lang } = useLang();
-  const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [input, setInput] = useState("");
+function DistancePanel() {
+  const { t } = useLang();
+  const [destination, setDestination] = useState("astana");
+  const selected = destinations.find((item) => item.id === destination) ?? destinations[0]!;
+  const hours = selected.km / 80;
+  const fuel = Math.round(selected.km * 0.08 * 255);
+  return (
+    <section>
+      <PanelTitle icon={Navigation}>{t(ui.distance)}</PanelTitle>
+      <label className="field-label">{t(ui.from)}</label>
+      <div className="select-like mb-3">Арқалық / Аркалык</div>
+      <label className="field-label" htmlFor="destination">{t(ui.to)}</label>
+      <select id="destination" className="drawer-select" value={destination} onChange={(event) => setDestination(event.target.value)}>
+        {destinations.map((item) => <option key={item.id} value={item.id}>{t(item.name)}</option>)}
+      </select>
+      <div className="metric-grid">
+        <article><MapPin /><span>{t(ui.distance)}</span><strong>{selected.km.toLocaleString()} {t(ui.km)}</strong></article>
+        <article><CarFront /><span>{t(ui.drive)}</span><strong>{Math.floor(hours)} {t(ui.h)} {Math.round((hours % 1) * 60)} {t(ui.min)}</strong></article>
+        <article className="col-span-2"><Fuel /><span>{t(ui.fuel)}</span><strong>{fuel.toLocaleString("ru-RU")} ₸</strong></article>
+      </div>
+      <p className="panel-note">{t(ui.fuelNote)}. {t(ui.estimate)}.</p>
+    </section>
+  );
+}
+
+type ChatMessage = { role: "user" | "assistant"; content: string };
+
+function AssistantPanel() {
+  const { lang, t } = useLang();
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
-  const endRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
-  useEffect(() => { if (!busy) inputRef.current?.focus(); }, [busy]);
+  const [error, setError] = useState("");
 
   async function send(text: string) {
-    if (!text.trim() || busy) return;
-    const next: Msg[] = [...msgs, { role: "user", content: text }];
-    setMsgs(next); setInput(""); setBusy(true);
+    const value = text.trim();
+    if (!value || busy) return;
+    const next: ChatMessage[] = [...messages, { role: "user", content: value }];
+    setMessages(next); setBusy(true); setError("");
     try {
-      const res = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: next, lang }) });
-      if (!res.ok || !res.body) throw new Error();
-      const reader = res.body.getReader(); const dec = new TextDecoder(); let acc = "";
-      setMsgs([...next, { role: "assistant", content: "" }]);
-      for (;;) { const { done, value } = await reader.read(); if (done) break; acc += dec.decode(value, { stream: true }); setMsgs([...next, { role: "assistant", content: acc }]); }
-      if (!acc) throw new Error();
-    } catch { setMsgs([...next, { role: "assistant", content: t(ui.error) }]); }
-    setBusy(false);
+      const response = await fetch("/api/chat", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messages: next, lang }) });
+      if (!response.ok || !response.body) {
+        const details = await response.json().catch(() => null) as { message?: string } | null;
+        throw new Error(details?.message || t(ui.error));
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let content = "";
+      setMessages([...next, { role: "assistant", content }]);
+      for (;;) {
+        const chunk = await reader.read();
+        if (chunk.done) break;
+        content += decoder.decode(chunk.value, { stream: true });
+        setMessages([...next, { role: "assistant", content }]);
+      }
+      if (!content) throw new Error(t(ui.error));
+    } catch (reason) {
+      setMessages(next);
+      setError(reason instanceof Error ? reason.message : t(ui.error));
+    } finally { setBusy(false); }
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div className="flex-1 space-y-3 overflow-y-auto pb-3 text-sm">
-        <div className="flex gap-2"><div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground"><MapPinned className="h-4 w-4" /></div><p className="pt-1">{t(ui.aiHello)}</p></div>
-        {msgs.length === 0 && <div className="flex flex-wrap gap-2">{t(ui.suggestions).split("|").map((s) => (
-          <button key={s} onClick={() => send(s)} className="rounded-full border border-panel-border px-3 py-1.5 text-xs hover:border-primary hover:text-primary">{s}</button>))}</div>}
-        {msgs.map((m, i) => m.role === "user"
-          ? <div key={i} className="ml-8 rounded-2xl rounded-br-sm bg-primary p-3 text-primary-foreground">{m.content}</div>
-          : <div key={i} className="prose prose-sm prose-invert max-w-none [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4"><ReactMarkdown>{m.content || "…"}</ReactMarkdown></div>)}
-        {busy && msgs[msgs.length - 1]?.role === "user" && <p className="animate-pulse text-xs text-panel-muted">{t(ui.thinking)}</p>}
-        <div ref={endRef} />
-      </div>
-      <form onSubmit={(e) => { e.preventDefault(); send(input); }} className="flex gap-2 border-t border-panel-border pt-3">
-        <input ref={inputRef} value={input} onChange={(e) => setInput(e.target.value)} placeholder={t(ui.askPlaceholder)} className="flex-1 rounded-xl bg-panel-2 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-primary" />
-        <button disabled={busy} className="grid w-11 place-items-center rounded-xl bg-primary text-primary-foreground disabled:opacity-50"><Send className="h-4 w-4" /></button>
-      </form>
-    </div>
+    <section className="assistant-panel">
+      <PanelTitle icon={Bot}>{t(ui.assistant)}</PanelTitle>
+      <Conversation className="assistant-conversation">
+        <ConversationContent className="gap-4 px-0 py-3">
+          <div className="assistant-intro"><span><Navigation /></span><p>{t(ui.aiHello)}</p></div>
+          {messages.map((message, index) => (
+            <Message key={`${message.role}-${index}`} from={message.role}>
+              <MessageContent className={message.role === "user" ? "bg-primary text-primary-foreground" : "text-panel-foreground"}>
+                {message.role === "assistant" ? <MessageResponse>{message.content}</MessageResponse> : message.content}
+              </MessageContent>
+            </Message>
+          ))}
+          {busy && messages.at(-1)?.role === "user" && <Shimmer className="text-sm">{t(ui.thinking)}</Shimmer>}
+          {error && <p className="chat-error">{error}</p>}
+          {messages.length === 0 && <div className="suggestion-list">{t(ui.suggestions).split("|").map((suggestion) => <Button key={suggestion} variant="outline" onClick={() => send(suggestion)}>{suggestion}<Send /></Button>)}</div>}
+        </ConversationContent>
+        <ConversationScrollButton />
+      </Conversation>
+      <PromptInput onSubmit={({ text }) => send(text)} className="assistant-composer">
+        <PromptInputTextarea placeholder={t(ui.askPlaceholder)} disabled={busy} />
+        <PromptInputFooter className="justify-end"><PromptInputSubmit status={busy ? "streaming" : "ready"} disabled={busy} /></PromptInputFooter>
+      </PromptInput>
+    </section>
   );
 }

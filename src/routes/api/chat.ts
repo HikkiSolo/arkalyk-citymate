@@ -1,32 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createOpenAI } from "@ai-sdk/openai";
-import { streamText } from "ai";
+import type { ModelMessage } from "ai";
+import { z } from "zod";
+import { handleCityChat } from "@/lib/ai-gateway.server";
+
+const requestSchema = z.object({
+  messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().trim().min(1).max(4000) })).min(1).max(20),
+  lang: z.enum(["kk", "ru"]),
+});
 
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const { messages, lang } = (await request.json()) as {
-          messages: { role: "user" | "assistant"; content: string }[];
-          lang: "kk" | "ru";
-        };
-        const key = process.env["LOVABLE_API_KEY"];
-        if (!key) return new Response("Missing key", { status: 500 });
-        const openai = createOpenAI({
-          baseURL: "https://ai.gateway.lovable.dev/v1",
-          apiKey: key,
-          headers: { "Lovable-API-Key": key, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
-        });
-        const result = streamText({
-          model: openai.responses("openai/gpt-6-astra"),
-          system: `You are "Арқалық Smart Navigator", a friendly city assistant for Arkalyk (Kostanay region, Kazakhstan). Help with transport, education (Arkalyk Pedagogical Institute named after I. Altynsarin, colleges, schools), student life, food, healthcare, akimat services and travel to other cities. Be concise (max ~120 words), use markdown lists when useful. Mention that details should be verified when unsure. Always reply in ${lang === "kk" ? "Kazakh" : "Russian"}.`,
-          messages: messages.slice(-20),
-          abortSignal: request.signal,
-          providerOptions: {
-            openai: { forceReasoning: true, reasoningEffort: "low", reasoningSummary: "auto", store: false, include: ["reasoning.encrypted_content"] },
-          },
-        });
-        return result.toTextStreamResponse();
+        const parsed = requestSchema.safeParse(await request.json().catch(() => null));
+        if (!parsed.success) return Response.json({ message: "Invalid request" }, { status: 400 });
+        return handleCityChat(request, parsed.data.messages as ModelMessage[], parsed.data.lang);
       },
     },
   },
