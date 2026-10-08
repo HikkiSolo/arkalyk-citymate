@@ -10,7 +10,7 @@ export const Route = createFileRoute("/api/chat")({
           messages: { role: "user" | "assistant"; content: string }[];
           lang: "kk" | "ru";
         };
-        const key = process.env.LOVABLE_API_KEY;
+        const key = process.env["LOVABLE_API_KEY"];
         if (!key) return new Response("Missing key", { status: 500 });
         const openai = createOpenAI({
           baseURL: "https://ai.gateway.lovable.dev/v1",
