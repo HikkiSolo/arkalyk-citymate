@@ -263,7 +263,11 @@ function DistancePanel() {
       <div className="metric-grid">
         <article><MapPin /><span>{t(ui.distance)}</span><strong>{selected.km.toLocaleString()} {t(ui.km)}</strong></article>
         <article><CarFront /><span>{t(ui.drive)}</span><strong>{Math.floor(hours)} {t(ui.h)} {Math.round((hours % 1) * 60)} {t(ui.min)}</strong></article>
-        <article className="col-span-2"><Fuel /><span>{t(ui.fuel)}</span><strong>{fuel.toLocaleString("ru-RU")} ₸</strong></article>
+        <article><TrainFront /><span>{t(ui.train)}</span><strong>{selected.km ? `≈ ${Math.floor(selected.trainHours)} ${t(ui.h)} ${Math.round((selected.trainHours % 1) * 60)} ${t(ui.min)}` : "—"}</strong></article>
+        <article><Fuel /><span>{t(ui.fuel)}</span><strong>{fuel.toLocaleString("ru-RU")} ₸</strong></article>
+      </div>
+      {selected.km === 0 && <p className="panel-note">{t(ui.sameCity)}</p>}
+      <div>
       </div>
       <p className="panel-note">{t(ui.fuelNote)}. {t(ui.estimate)}.</p>
     </section>
