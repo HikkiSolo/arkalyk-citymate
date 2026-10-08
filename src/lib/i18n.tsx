@@ -47,9 +47,21 @@ export const ui = {
   thinking: { kk: "Жауап іздеп жатырмын…", ru: "Ищу ответ…" },
   error: { kk: "Сұрауды өңдеу мүмкін болмады. Қайталап көріңіз.", ru: "Не удалось обработать запрос. Попробуйте ещё раз." },
   suggestions: { kk: "АрҚПИ қабылдау комиссиясы|Аурухананың телефоны|Вокзалға қалай жетуге болады?", ru: "Приёмная комиссия АрКПИ|Телефон больницы|Как доехать до вокзала?" },
+  settings: { kk: "Карта баптаулары", ru: "Настройки карты" },
+  settingsHint: { kk: "Картада көрсетілетін нысан түрлерін таңдаңыз", ru: "Выберите, какие объекты показывать на карте" },
+  train: { kk: "Пойызбен", ru: "На поезде" },
+  sameCity: { kk: "Сіз Арқалықтасыз", ru: "Вы уже в Аркалыке" },
 } satisfies Record<string, Localized>;
 
-export type Category = "edu" | "school" | "transport" | "gov" | "health" | "emergency";
+export type Category = "edu" | "school" | "transport" | "gov" | "health" | "emergency" | "park" | "shop" | "pharmacy";
+export type Layer = "education" | "civic" | "parks" | "shops" | "other";
+export const layers: { id: Layer; label: Localized; cats: Category[] }[] = [
+  { id: "education", label: { kk: "Оқу орындары", ru: "Учебные заведения" }, cats: ["edu", "school"] },
+  { id: "civic", label: { kk: "Ауруханалар және мемлекеттік органдар", ru: "Больницы и госорганы" }, cats: ["health", "gov", "emergency"] },
+  { id: "parks", label: { kk: "Саябақтар мен скверлер", ru: "Парки и скверы" }, cats: ["park"] },
+  { id: "shops", label: { kk: "Дүкендер мен СОО", ru: "Магазины и ТРЦ" }, cats: ["shop", "pharmacy"] },
+  { id: "other", label: { kk: "Басқа орындар / Көлік", ru: "Другие заведения / Транспорт" }, cats: ["transport"] },
+];
 export type EducationInfo = { passingScore: Localized; specialties: Localized[]; dormitory: Localized };
 export type CivicInfo = { directLines: Localized[]; services: Localized };
 
@@ -73,7 +85,20 @@ export const categories: Record<Category, { icon: string; label: Localized }> = 
   gov: { icon: "🏛", label: { kk: "Мемлекеттік қызметтер", ru: "Госслужбы" } },
   emergency: { icon: "!", label: { kk: "Жедел қызметтер", ru: "Экстренные службы" } },
   transport: { icon: "↗", label: { kk: "Көлік", ru: "Транспорт" } },
+  park: { icon: "🌳", label: { kk: "Саябақтар және демалыс", ru: "Парки и отдых" } },
+  shop: { icon: "🛍", label: { kk: "Сауда", ru: "Торговля" } },
+  pharmacy: { icon: "💊", label: { kk: "Дәріхана", ru: "Аптека" } },
 };
+
+const L = (kk: string, ru: string): Localized => ({ kk, ru });
+const schoolEdu = (profile: Localized): EducationInfo => ({
+  passingScore: L("Қабылдау тұрғылықты жері бойынша; бейіндік сыныптарға іріктеу болуы мүмкін", "Приём по месту жительства; в профильные классы возможен отбор"),
+  specialties: [profile],
+  dormitory: L("Жатақхана жоқ", "Общежития нет"),
+});
+const daily = (h: string) => L(`Күн сайын ${h}`, `Ежедневно ${h}`);
+const extra = (id: string, cat: Category, pos: [number, number], name: Localized, address: Localized, phone: string, hours: Localized, summary: Localized, more: Partial<Place> = {}): Place =>
+  ({ id, cat, pos, name, address, phone, hours, summary, ...more });
 
 const dorm = {
   kk: "Институт жатақханасы бар. Орын бөлу шарттарын қабылдау комиссиясынан нақтылаңыз.",
