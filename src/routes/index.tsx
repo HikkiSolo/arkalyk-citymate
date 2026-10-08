@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ArrowLeft, Bot, BusFront, Calculator, CarFront, ChevronRight, Clock3, Fuel,
-  MapPin, Menu, Navigation, Search, Send, TrainFront, X,
+  ArrowLeft, Bot, BusFront, CarFront, ChevronRight, Clock3, Fuel,
+  MapPin, Menu, Navigation, Search, Send, SlidersHorizontal, TrainFront, X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,8 +15,8 @@ import {
 } from "@/components/ai-elements/prompt-input";
 import { Shimmer } from "@/components/ai-elements/shimmer";
 import {
-  LangProvider, buses, categories, destinations, intercity, places, ui, useLang,
-  type Category,
+  LangProvider, buses, categories, destinations, intercity, layers, places, ui, useLang,
+  type Layer,
 } from "@/lib/i18n";
 
 const CityMap = lazy(() => import("@/components/CityMap"));
@@ -39,7 +39,7 @@ export const Route = createFileRoute("/")({
   component: () => <LangProvider><App /></LangProvider>,
 });
 
-type Panel = "schedule" | "search" | "distance" | "assistant" | null;
+type Panel = "schedule" | "search" | "distance" | "assistant" | "settings" | null;
 const allPlaceIds = places.map((place) => place.id);
 
 function App() {
@@ -50,6 +50,11 @@ function App() {
   const [visibleIds, setVisibleIds] = useState(allPlaceIds);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [resetToken, setResetToken] = useState(0);
+  const [enabled, setEnabled] = useState<Record<Layer, boolean>>({ education: true, civic: true, parks: true, shops: true, other: true });
+  const shownIds = useMemo(() => {
+    const cats = new Set(layers.filter((layer) => enabled[layer.id]).flatMap((layer) => layer.cats));
+    return visibleIds.filter((id) => id === activeId || cats.has(places.find((p) => p.id === id)!.cat));
+  }, [visibleIds, enabled, activeId]);
 
   useEffect(() => setMounted(true), []);
   useEffect(() => {
@@ -84,6 +89,7 @@ function App() {
     { id: "search" as const, icon: Search, label: t(ui.search) },
     { id: "distance" as const, icon: Navigation, label: t(ui.distance) },
     { id: "assistant" as const, icon: Bot, label: t(ui.assistant) },
+    { id: "settings" as const, icon: SlidersHorizontal, label: t(ui.settings) },
   ];
 
   return (
@@ -91,7 +97,7 @@ function App() {
       <main className="absolute inset-0" aria-label={t(ui.appName)}>
         {mounted && (
           <Suspense fallback={<div className="grid h-full place-items-center text-sm text-muted-foreground">{t(ui.appName)}</div>}>
-            <CityMap visibleIds={visibleIds} activeId={activeId} resetToken={resetToken} />
+            <CityMap visibleIds={shownIds} activeId={activeId} resetToken={resetToken} />
           </Suspense>
         )}
       </main>
@@ -143,6 +149,21 @@ function App() {
           {panel === "search" && <SearchPanel onResults={setVisibleIds} onSelect={selectPlace} />}
           {panel === "distance" && <DistancePanel />}
           {panel === "assistant" && <AssistantPanel />}
+          {panel === "settings" && (
+            <section>
+              <PanelTitle icon={SlidersHorizontal}>{t(ui.settings)}</PanelTitle>
+              <p className="panel-note mb-3 mt-0">{t(ui.settingsHint)}</p>
+              <div className="space-y-2">
+                {layers.map((layer) => (
+                  <label key={layer.id} className="layer-toggle">
+                    <input type="checkbox" checked={enabled[layer.id]} onChange={(e) => setEnabled((s) => ({ ...s, [layer.id]: e.target.checked }))} />
+                    <span>{t(layer.label)}</span>
+                    <small>{places.filter((p) => layer.cats.includes(p.cat)).length}</small>
+                  </label>
+                ))}
+              </div>
+            </section>
+          )}
         </div>
       </aside>
     </div>
@@ -242,7 +263,11 @@ function DistancePanel() {
       <div className="metric-grid">
         <article><MapPin /><span>{t(ui.distance)}</span><strong>{selected.km.toLocaleString()} {t(ui.km)}</strong></article>
         <article><CarFront /><span>{t(ui.drive)}</span><strong>{Math.floor(hours)} {t(ui.h)} {Math.round((hours % 1) * 60)} {t(ui.min)}</strong></article>
-        <article className="col-span-2"><Fuel /><span>{t(ui.fuel)}</span><strong>{fuel.toLocaleString("ru-RU")} ₸</strong></article>
+        <article><TrainFront /><span>{t(ui.train)}</span><strong>{selected.km ? `≈ ${Math.floor(selected.trainHours)} ${t(ui.h)} ${Math.round((selected.trainHours % 1) * 60)} ${t(ui.min)}` : "—"}</strong></article>
+        <article><Fuel /><span>{t(ui.fuel)}</span><strong>{fuel.toLocaleString("ru-RU")} ₸</strong></article>
+      </div>
+      {selected.km === 0 && <p className="panel-note">{t(ui.sameCity)}</p>}
+      <div>
       </div>
       <p className="panel-note">{t(ui.fuelNote)}. {t(ui.estimate)}.</p>
     </section>

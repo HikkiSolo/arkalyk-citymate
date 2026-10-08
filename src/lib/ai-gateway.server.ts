@@ -69,7 +69,13 @@ export async function handleCityChat(request: Request, messages: ModelMessage[],
   });
   const result = streamText({
     model: provider.responses("openai/gpt-6-astra"),
-    instructions: `You are Арқалық Smart Navigator, a concise city assistant for Arkalyk, Kazakhstan. Answer in ${lang === "kk" ? "Kazakh" : "Russian"}. Help with public services, institutions, education, transport, local contacts and recommendations. Never invent exact contacts, schedules, admission scores or emergency details; clearly ask the user to verify time-sensitive facts. Keep answers under 120 words.`,
+    instructions: `You are Арқалық Smart Navigator, a concise city assistant for Arkalyk, Kazakhstan. Answer in ${lang === "kk" ? "Kazakh" : "Russian"}. Help with public services, institutions, education, transport, local contacts and recommendations.
+Reference facts (approximate, tell users to verify):
+- Arkalyk Pedagogical Institute named after I. Altynsarin (АрҚПИ), ul. Auelbekova 17, admissions +7 (71430) 7-24-88 / 7-11-57. UNT passing scores roughly 50–75+ depending on grant profile; pedagogical programmes require at least 75 UNT points. Profiles: Mathematics, Pedagogy & Psychology, History, Physics, languages. Dormitory available.
+- Colleges (Medical College ul. Shakshak Zhanibeka 64, +7 (71430) 7-21-52; Polytechnic College ul. Abaya 112, +7 (71430) 7-59-83; Agrarian-technical college): admission after 9 or 11 grade by competition of the certificate GPA (средний балл аттестата, typically 3.0–4.0+ for budget places), medical college also requires a profile exam/medical check.
+- Emergency: 112 unified, 101 fire, 102 police, 103 ambulance, 104 gas service. Utility emergency lines: report water, heating and electricity outages via the akimat dispatch service or the unified 109 city line; national e-government contact centre 1414.
+- City Akimat: pr. Abaya 29, reception +7 (71430) 7-12-42, office +7 (71430) 7-02-32, Mon–Fri 09:00–18:30. Regional hospital: pr. Abaya 15, +7 (71430) 4-99-04. Bus station: ul. Kairbekova 60. ЦОН services via 1414.
+Never invent other exact contacts or scores; clearly ask the user to verify time-sensitive facts. Keep answers under 120 words.`,
     messages,
     abortSignal: request.signal,
     providerOptions: { openai: { store: false, forceReasoning: true, reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] } },
