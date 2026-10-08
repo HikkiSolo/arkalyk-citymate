@@ -43,7 +43,7 @@ function PopupDetail({ placeId }: { placeId: string }) {
       <p className="place-popup__summary">{t(place.summary)}</p>
       <dl className="place-popup__facts">
         <div><MapPin /><dt>{t(ui.address)}</dt><dd>{t(place.address)}</dd></div>
-        <div><Phone /><dt>{t(ui.phone)}</dt><dd><a href={`tel:${place.phone.split("/")[0].replace(/[^+\d]/g, "")}`}>{place.phone}</a></dd></div>
+        <div><Phone /><dt>{t(ui.phone)}</dt><dd><a href={`tel:${place.phone.split("/")[0]!.replace(/[^+\d]/g, "")}`}>{place.phone}</a></dd></div>
         <div><Clock3 /><dt>{t(ui.hours)}</dt><dd>{t(place.hours)}</dd></div>
       </dl>
       {place.education && (

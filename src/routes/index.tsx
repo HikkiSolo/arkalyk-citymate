@@ -227,7 +227,7 @@ function SearchPanel({ onResults, onSelect }: { onResults: (ids: string[]) => vo
 function DistancePanel() {
   const { t } = useLang();
   const [destination, setDestination] = useState("astana");
-  const selected = destinations.find((item) => item.id === destination) ?? destinations[0];
+  const selected = destinations.find((item) => item.id === destination) ?? destinations[0]!;
   const hours = selected.km / 80;
   const fuel = Math.round(selected.km * 0.08 * 255);
   return (
